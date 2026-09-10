@@ -52,9 +52,14 @@
   button{
     font:inherit;font-weight:500;padding:11px 18px;border:1px solid var(--ink);
     background:var(--ink);color:var(--panel);border-radius:3px;cursor:pointer;
+    transition:background .12s,color .12s,border-color .12s,transform .06s,box-shadow .12s;
   }
-  button.ghost{background:transparent;color:var(--ink);border-color:var(--rule)}
-  button:disabled{opacity:.45;cursor:default}
+  button:hover{box-shadow:0 2px 8px rgba(0,0,0,.18)}
+  button:active{transform:translateY(1px);box-shadow:none}
+  button.ghost{background:transparent;color:var(--muted);border-color:var(--rule)}
+  button.ghost:hover{color:var(--ink);border-color:var(--ink);background:var(--panel)}
+  button.ghost:active{background:var(--rule)}
+  button:disabled,button:disabled:hover{opacity:.45;cursor:default;transform:none;box-shadow:none}
   .note{font-size:13px;color:var(--muted);margin-top:14px;border-left:2px solid var(--rule);padding-left:12px}
   .err{margin-top:16px;padding:12px 14px;background:var(--panel);border-left:3px solid var(--warm);font-size:14px}
   .err b{display:block;margin-bottom:4px}
@@ -99,7 +104,9 @@
   .track{height:3px;background:var(--rule);margin-top:5px}
   .track i{display:block;height:3px;background:var(--live)}
   .mval{text-align:right;font-size:14px}
-  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:24px;padding-top:18px;border-top:1px solid var(--rule)}
+  .controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:18px;padding:12px 14px;
+            background:var(--panel);border:1px solid var(--rule);border-radius:4px}
+  .controls button{padding:8px 14px;font-size:14px}
   .controls label{font-size:13px;color:var(--muted)}
   input[type=range]{accent-color:var(--live);width:150px;height:22px;cursor:pointer}
   .controls .ivlabel{font-size:13px;color:var(--ink);font-family:'IBM Plex Mono',monospace;min-width:44px}
@@ -239,7 +246,9 @@ async function poll(){
   paint();
 }
 
-function start(){ stop(); S.running = true; S.timer = setInterval(poll, S.interval); }
+// ponytail: tick once up front so the graph draws its first bar on connect (and right after an
+// interval change) instead of sitting empty for a whole interval
+function start(){ stop(); S.running = true; poll(); S.timer = setInterval(poll, S.interval); }
 function stop(){ S.running = false; if(S.timer) clearInterval(S.timer); S.timer = null; }
 
 // spend in the trailing window, extrapolated to an hourly rate
@@ -403,13 +412,6 @@ function render(){
         <span data-torph="used"></span> used of <span data-torph="granted"></span> bought<span id="tickerr"></span></div>
     </div>
 
-    <hr class="rule">
-    <h2>Daily spend</h2>
-    <p class="sub">Last 30 completed UTC days. Today's usage lands here tomorrow — the meter above is what covers right now.</p>
-    ${S.activity ? dailyBars() : `<p class="empty">${esc(S.activityErr||'Loading…')}</p>`}
-
-    ${S.activity ? `<hr class="rule"><h2>Where it went</h2><p class="sub">Top models by cost over the same window.</p><div class="models">${modelRows()}</div>` : ''}
-
     <div class="controls">
       <button class="ghost" id="toggle">${S.running?'Pause':'Resume'}</button>
       <button class="ghost" id="now">Check now</button>
@@ -419,7 +421,15 @@ function render(){
              aria-label="Check interval" aria-valuetext="${ivText(S.interval)}">
       <span class="ivlabel num" data-torph="iv"></span>
       <button class="ghost" id="out" style="margin-left:auto">Forget key</button>
-    </div>`;
+    </div>
+
+    <hr class="rule">
+    <h2>Daily spend</h2>
+    <p class="sub">Last 30 completed UTC days. Today's usage lands here tomorrow — the meter above is what covers right now.</p>
+    ${S.activity ? dailyBars() : `<p class="empty">${esc(S.activityErr||'Loading…')}</p>`}
+
+    ${S.activity ? `<hr class="rule"><h2>Where it went</h2><p class="sub">Top models by cost over the same window.</p><div class="models">${modelRows()}</div>` : ''}
+`;
 
   $('toggle').onclick = () => { S.running ? stop() : start(); paint(); };
   $('now').onclick = () => { poll(); if(S.activity===null) loadActivity(); };
