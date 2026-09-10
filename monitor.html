@@ -75,7 +75,7 @@
   @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
   @media (prefers-reduced-motion:reduce){
     .dot.on{animation:none}
-    .spark rect,.bars rect,.track i{transition:none;animation:none}
+    .spark rect,.bars rect,.track i,.tip{transition:none;animation:none}
   }
 
   /* chart motion: bars keep their identity across polls so CSS can tween them */
@@ -104,6 +104,18 @@
   input[type=range]{accent-color:var(--live);width:150px;height:22px;cursor:pointer}
   .controls .ivlabel{font-size:13px;color:var(--ink);font-family:'IBM Plex Mono',monospace;min-width:44px}
   .empty{color:var(--muted);font-size:14px;background:var(--panel);padding:14px;border-left:2px solid var(--rule)}
+
+  /* native <title> waits ~1s and can't be sized — so, our own */
+  .tip{
+    position:fixed;left:0;top:0;z-index:10;pointer-events:none;
+    background:var(--ink);color:var(--paper);padding:9px 12px;border-radius:4px;
+    box-shadow:0 6px 18px rgba(0,0,0,.25);white-space:nowrap;
+    visibility:hidden;opacity:0;transition:opacity .07s linear;
+  }
+  .tip.on{visibility:visible;opacity:1}
+  .tip b{display:block;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;
+         font-size:21px;font-weight:600;letter-spacing:-0.01em}
+  .tip span{display:block;font-size:12.5px;opacity:.72;margin-top:3px}
 </style>
 
 </head><body><div class="or-root" id="root">
@@ -255,7 +267,7 @@ function paintSpark(){
   if(g.childElementCount !== SLOTS){
     g.innerHTML = Array.from({length:SLOTS},(_,i)=>
       `<rect x="${(i*bw + bw*0.15).toFixed(1)}" width="${(bw*0.7).toFixed(1)}" `
-      + `y="${h-pad}" height="0" opacity="0" fill="var(--live)"><title></title></rect>`).join('');
+      + `y="${h-pad}" height="0" opacity="0" fill="var(--live)"/>`).join('');
   }
   const win = S.samples.slice(-(SLOTS+1));
   const deltas = win.slice(1).map((s,i)=> Math.max(0, s.used - win[i].used));
@@ -269,7 +281,8 @@ function paintSpark(){
     r.setAttribute('y', (h - pad - bh).toFixed(1));
     r.setAttribute('height', bh.toFixed(2));
     r.setAttribute('opacity', v==null ? 0 : (v>0 ? 1 : 0.35));
-    r.firstChild.textContent = v==null ? '' : `${new Date(win[i+1].t).toLocaleTimeString()}: ${money(v)}`;
+    if(v==null){ r.removeAttribute('data-tip'); }
+    else{ r.dataset.tip = money(v); r.dataset.tipWhen = new Date(win[i+1].t).toLocaleTimeString(); }
   }
   $('sparkmax').textContent = deltas.length ? money(max) : '—';
 }
@@ -289,7 +302,7 @@ function dailyBars(){
   days.forEach((d,i)=>{
     const bh = (byDay[d]/max)*(h-bottom-6);
     const bx = i*bw + bw*0.14, bwid = bw*0.72;
-    bars += `<rect x="${bx.toFixed(1)}" y="${(h-bottom-bh).toFixed(1)}" width="${bwid.toFixed(1)}" height="${Math.max(bh,0.6).toFixed(1)}" fill="var(--ink)" style="animation-delay:${i*18}ms"><title>${esc(d)}: ${money(byDay[d])}</title></rect>`;
+    bars += `<rect x="${bx.toFixed(1)}" y="${(h-bottom-bh).toFixed(1)}" width="${bwid.toFixed(1)}" height="${Math.max(bh,0.6).toFixed(1)}" fill="var(--ink)" style="animation-delay:${i*18}ms" data-tip="${money(byDay[d])}" data-tip-when="${esc(d)}"/>`;
     if(i===0 || i===days.length-1 || i===Math.floor(days.length/2)){
       const anchor = i===0?'start':(i===days.length-1?'end':'middle');
       const tx = i===0?2:(i===days.length-1?w-2:bx+bwid/2);
@@ -425,6 +438,25 @@ function paint(){
     iv: ivText(S.interval)
   });
 }
+
+// one node, follows the cursor, delegated off #root so it survives every re-render
+const tip = document.createElement('div');
+tip.className = 'tip';
+tip.innerHTML = '<b></b><span></span>';
+document.body.appendChild(tip);
+const tipVal = tip.firstChild, tipWhen = tip.lastChild;
+$('root').addEventListener('mousemove', e => {
+  const el = e.target.closest?.('[data-tip]');
+  if(!el){ tip.classList.remove('on'); return; }
+  tipVal.textContent = el.dataset.tip;
+  tipWhen.textContent = el.dataset.tipWhen || '';
+  tip.classList.add('on');
+  const box = tip.getBoundingClientRect();
+  const x = Math.min(Math.max(e.clientX - box.width/2, 8), innerWidth - box.width - 8);
+  const y = e.clientY - box.height - 14;
+  tip.style.transform = `translate(${x.toFixed(0)}px,${(y<8 ? e.clientY+18 : y).toFixed(0)}px)`;
+});
+$('root').addEventListener('mouseleave', () => tip.classList.remove('on'));
 
 render();
 </script>
