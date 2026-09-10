@@ -287,6 +287,9 @@ function paintSpark(){
   $('sparkmax').textContent = deltas.length ? money(max) : '—';
 }
 
+// axis labels read $10, not $10.00 — but keep digits for sub-dollar days
+const axisMoney = v => '$' + (+v.toFixed(v>=1 ? 2 : 4)).toLocaleString();
+
 // round the axis top up to something with a readable label
 const niceMax = v => {
   const p = 10 ** Math.floor(Math.log10(v));
@@ -312,7 +315,7 @@ function dailyBars(){
   for(const f of [0, 0.5, 1]){
     const y = yOf(axisMax*f);
     if(f) grid += `<line x1="${left}" y1="${y.toFixed(1)}" x2="${w}" y2="${y.toFixed(1)}" stroke="var(--rule)" stroke-dasharray="2 5"/>`;
-    grid += `<text x="${left-9}" y="${(y+3.5).toFixed(1)}" font-size="11" fill="var(--muted)" text-anchor="end" font-family="IBM Plex Mono, monospace">${money(axisMax*f)}</text>`;
+    grid += `<text x="${left-9}" y="${(y+3.5).toFixed(1)}" font-size="11" fill="var(--muted)" text-anchor="end" font-family="IBM Plex Mono, monospace">${axisMoney(axisMax*f)}</text>`;
   }
 
   let bars = '', labels = '';
@@ -327,7 +330,7 @@ function dailyBars(){
     }
   });
   const total = days.reduce((s,d)=>s+byDay[d],0);
-  return `<svg class="bars" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Daily spend, last 30 days, up to ${money(axisMax)} per day">
+  return `<svg class="bars" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Daily spend, last 30 days, up to ${axisMoney(axisMax)} per day">
     ${grid}<line x1="${left}" y1="${h-bottom}" x2="${w}" y2="${h-bottom}" stroke="var(--rule)"/>${bars}${labels}</svg>
     <p class="sub" style="margin-top:8px">Peak day ${money(max)} · 30-day total ${money(total)}</p>`;
 }
