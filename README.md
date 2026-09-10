@@ -2,7 +2,7 @@
 
 A single HTML file that watches your OpenRouter credit balance draw down in real time.
 
-Open `monitor.html` over `http://` (not `file://` — the browser blocks the cross-origin
+Open `index.html` over `http://` (not `file://` — the browser blocks the cross-origin
 request), paste an API key, and it polls `/credits` on an interval you pick with the slider.
 
 - **Burn rate** — spend in the trailing window, extrapolated to an hourly rate, with runway.
@@ -14,11 +14,3 @@ The key lives in the page's memory only. Nothing is stored, and nothing is sent 
 but `openrouter.ai`. Closing the tab clears it.
 
 Dark mode follows your OS. Motion respects `prefers-reduced-motion`.
-
-## Serving it
-
-```bash
-python3 -m http.server 8777
-```
-
-Then open http://localhost:8777/monitor.html
