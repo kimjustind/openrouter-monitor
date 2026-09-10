@@ -68,8 +68,8 @@
   .meter{margin-bottom:6px}
   .meter-top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap}
   .rate{font-size:clamp(44px,9vw,76px);font-weight:500;letter-spacing:-0.03em;line-height:1}
-  .rate small{font-size:.32em;color:var(--muted);font-weight:400;letter-spacing:0;margin-left:.35em}
   .rate-label{color:var(--muted);font-size:14px;margin-bottom:6px}
+  .rate-sub{color:var(--muted);font-size:14px;margin-top:6px}
   .facts{display:flex;gap:28px;flex-wrap:wrap;text-align:right}
   .fact-v{font-size:20px;font-weight:500}
   .fact-k{font-size:12px;color:var(--muted)}
@@ -100,6 +100,8 @@
   .row{display:grid;grid-template-columns:1fr 84px;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--rule)}
   .row:last-child{border-bottom:0}
   .mname{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .mname a{color:inherit;text-decoration:none;border-bottom:1px solid var(--rule)}
+  .mname a:hover{border-bottom-color:currentColor}
   .msub{font-size:12px;color:var(--muted)}
   .track{height:3px;background:var(--rule);margin-top:5px}
   .track i{display:block;height:3px;background:var(--live)}
@@ -133,7 +135,7 @@
           <input id="key" type="password" aria-label="OpenRouter API key" placeholder="sk-or-v1-..." autocomplete="off" spellcheck="false">
           <button id="go">Start watching</button>
         </div>
-        <p class="note">The key stays in this page's memory only — nothing is saved or sent anywhere but openrouter.ai. Closing the tab clears it. A management key also unlocks the 30-day history.</p>
+        <p class="note"><a href="#" id="trydemo">See it running on sample data</a> — no key needed. The key stays in this page's memory only — nothing is saved or sent anywhere but openrouter.ai. Closing the tab clears it. A management key also unlocks the 30-day history.</p>
         
       </div></div>
 
@@ -152,7 +154,34 @@ const torphReady = import('https://esm.sh/torph@0.0.9')
   .then(mod => { S.torph = mod; animateReadouts(); })
   .catch(() => null);
 const money = n => (n==null||isNaN(n)) ? '—' : '$'+Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:n<1?4:2});
+// ponytail: session spend rounds UP to the whole cent — toFixed first, or float slop
+// turns an exact $0.07 into $0.08
+const upToCent = n => (n==null||isNaN(n)) ? '—' :
+  '$'+(Math.ceil(+(n*100).toFixed(6))/100).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+const numOf = s => { const n = parseFloat(String(s).replace(/[^0-9.-]/g,'')); return isNaN(n) ? null : n; };
+
+// ponytail: torph reflows characters sideways and cross-fades the ones that changed. The ticker
+// roll is ours — re-animating the spans torph just swapped is enough, because a WAAPI animation
+// started later wins the transform. Digits that didn't change never move, same as Robinhood.
+const ROLL = 'cubic-bezier(0.22, 1, 0.36, 1)', MORPH_MS = 520;
+function rollSwapped(el, kept, up){
+  if(reduced.matches) return;
+  // ponytail: half an em, not a full line — nothing clips these spans, so a long roll streaks
+  // over the label above. The fade does the rest of the work.
+  const dy = parseFloat(getComputedStyle(el).fontSize) * 0.45 * (up ? 1 : -1);
+  for(const item of el.querySelectorAll('[torph-item]')){
+    if(kept.has(item)) continue;
+    item.animate([{transform:`translateY(${dy}px)`, opacity:0}, {transform:'translateY(0)', opacity:1}],
+      {duration:MORPH_MS, easing:ROLL, fill:'both'});
+  }
+  for(const item of el.querySelectorAll('[torph-exiting]')){
+    item.animate([{transform:'translateY(0)', opacity:1}, {transform:`translateY(${-dy}px)`, opacity:0}],
+      {duration:Math.round(MORPH_MS*0.55), easing:ROLL, fill:'both'});
+  }
+}
 
 function animateReadouts(values=S.morphCurrent){
   S.morphCurrent = {...S.morphCurrent, ...values};
@@ -161,23 +190,64 @@ function animateReadouts(values=S.morphCurrent){
     if(!el) continue;
     const next = String(value);
     const previous = S.morphValues[key];
-    el.textContent = previous ?? next;
-    if(S.torph && previous != null && previous !== next){
-      const morph = new S.torph.TextMorph({
+    if(!S.torph){ el.textContent = next; S.morphValues[key] = next; continue; }
+    // ponytail: one morph instance per element, kept on the node — a fresh instance treats every
+    // update as its initial render and animates nothing. render() drops the node and the instance
+    // with it, so there is nothing to clean up.
+    if(!el.morph){
+      el.morph = new S.torph.TextMorph({
         element: el,
-        duration: 520,
+        duration: MORPH_MS,
         ease: {stiffness: 180, damping: 20},
         respectReducedMotion: true
       });
-      morph.update(next);
-    }else{
-      el.textContent = next;
+      el.morph.update(previous ?? next);   // initial render, no animation
     }
+    const kept = new Set(el.querySelectorAll('[torph-item]'));
+    el.morph.update(next);
+    const a = numOf(previous), b = numOf(next);
+    rollSwapped(el, kept, a==null || b==null || b >= a);
     S.morphValues[key] = next;
   }
 }
 
+// ponytail: sample data behind the same api() the real thing uses, so every chart, tooltip and
+// counter below runs unmodified. `?demo`, or the Try it button on the key screen.
+// model, share of daily spend, rough $ per call — so the call counts read plausibly
+const DEMO_MODELS = [
+  ['anthropic/claude-sonnet-4.5', 0.62, 0.021], ['openai/gpt-4o-mini', 0.13, 0.0009],
+  ['google/gemini-2.5-flash', 0.16, 0.0013], ['meta-llama/llama-3.3-70b', 0.09, 0.0006]];
+let demoUsed = 12.3421;
+
+function demoApi(path){
+  if(path === '/credits'){
+    demoUsed += 0.004 + Math.random()*0.02;
+    return {data:{total_credits:50, total_usage:demoUsed}};
+  }
+  const rows = [];
+  for(let d=30; d>=1; d--){
+    const date = new Date(Date.now() - d*86400000).toISOString().slice(0,10);
+    const dow = new Date(date+'T00:00:00Z').getUTCDay();
+    // weekends are quiet, and the last fortnight ramps
+    const day = (dow===0||dow===6 ? 0.3 : 1) * (0.55 + (30-d)/40) * (0.7 + Math.random()*0.6);
+    for(const [model, share, perCall] of DEMO_MODELS){
+      const usage = day * share * 1.1;
+      if(usage < 0.002) continue;
+      const req = Math.round(usage/perCall) + 1;
+      rows.push({date, model, usage, requests:req,
+        prompt_tokens: req*840, completion_tokens: req*260});
+    }
+  }
+  return {data:rows};
+}
+
+function demo(){
+  $('key').value = 'demo';
+  connect();
+}
+
 async function api(path, key){
+  if(key === 'demo') return demoApi(path);
   const r = await fetch(API+path, {headers:{Authorization:'Bearer '+key}});
   if(!r.ok){
     let msg = r.status+' '+r.statusText;
@@ -250,6 +320,11 @@ async function poll(){
 // interval change) instead of sitting empty for a whole interval
 function start(){ stop(); S.running = true; poll(); S.timer = setInterval(poll, S.interval); }
 function stop(){ S.running = false; if(S.timer) clearInterval(S.timer); S.timer = null; }
+
+// seconds while the session is young, then coarser units so the number stays readable
+const elapsedText = s =>
+  s < 90 ? `${Math.round(s)} seconds` :
+  s < 5400 ? `${Math.round(s/60)} minutes` : `${(s/3600).toFixed(1)} hours`;
 
 // spend in the trailing window, extrapolated to an hourly rate
 function burnRate(){
@@ -362,7 +437,8 @@ function modelRows(){
   return rows.map(([m,v],i)=>`
     <div class="row">
       <div>
-        <div class="mname">${esc(m)}</div>
+        <div class="mname">${m==='unknown' ? esc(m)
+          : `<a href="${esc(encodeURI('https://openrouter.ai/'+m))}" target="_blank" rel="noopener">${esc(m)}</a>`}</div>
         <div class="msub num">${v.req.toLocaleString()} calls · ${(v.tin/1000).toFixed(0)}k in · ${(v.tout/1000).toFixed(0)}k out</div>
         <div class="track"><i style="width:${(v.usage/max*100).toFixed(1)}%;animation-delay:${i*45}ms"></i></div>
       </div>
@@ -381,10 +457,11 @@ function render(){
           <input id="key" type="password" aria-label="OpenRouter API key" placeholder="sk-or-v1-..." autocomplete="off" spellcheck="false">
           <button id="go" ${S.busy?'disabled':''}>${S.busy?'Checking…':'Start watching'}</button>
         </div>
-        <p class="note">The key stays in this page's memory only — nothing is saved or sent anywhere but openrouter.ai. Closing the tab clears it. A management key also unlocks the 30-day history.</p>
+        <p class="note"><a href="#" id="trydemo">See it running on sample data</a> — no key needed. The key stays in this page's memory only — nothing is saved or sent anywhere but openrouter.ai. Closing the tab clears it. A management key also unlocks the 30-day history.</p>
         ${S.err?`<div class="err"><b>Couldn't reach OpenRouter</b>${esc(S.err)}</div>`:''}
       </div>`;
     $('go').onclick = connect;
+    $('trydemo').onclick = e => { e.preventDefault(); demo(); };
     $('key').onkeydown = e => { if(e.key==='Enter') connect(); };
     // ponytail: paste is the only "provided" signal worth auto-firing on; typing a key by hand still needs Enter
     $('key').oninput = e => { if(e.inputType==='insertFromPaste' && e.target.value.trim()) connect(); };
@@ -396,13 +473,14 @@ function render(){
     <div class="meter">
       <div class="meter-top">
         <div>
-          <div class="rate-label">Burn rate</div>
-          <div class="rate num"><span data-torph="rate"></span><small>per hour</small></div>
+          <div class="rate-label">Spent here</div>
+          <div class="rate num"><span data-torph="sessionSpend"></span></div>
+          <div class="rate-sub">in <span id="elapsed">0 seconds</span></div>
         </div>
         <div class="facts">
           <div><div class="fact-v num"><span data-torph="remaining"></span></div><div class="fact-k">Credits left</div></div>
-          <div><div class="fact-v num"><span data-torph="sessionSpend"></span></div><div class="fact-k">Spent in <span id="mins">0</span> min here</div></div>
-          <div><div class="fact-v num"><span data-torph="runway"></span></div><div class="fact-k">At this pace</div></div>
+          <div><div class="fact-v num"><span data-torph="rate"></span></div><div class="fact-k">Burn rate per hour</div></div>
+          <div><div class="fact-v num"><span data-torph="runway"></span></div><div class="fact-k">Estimated runway</div></div>
         </div>
       </div>
       <svg class="spark" viewBox="0 0 ${SPARK_W} ${SPARK_H}" preserveAspectRatio="none" role="img" aria-label="Spend per check, most recent on the right">
@@ -454,7 +532,7 @@ function paint(){
   const rate = burnRate();
   const runway = (rate && rate > 0) ? (granted - used)/rate : null;
 
-  $('mins').textContent = S.since ? Math.round((Date.now()-S.since)/60000) : 0;
+  $('elapsed').textContent = elapsedText(S.since ? (Date.now()-S.since)/1000 : 0);
   $('dot').className = 'dot' + (S.running ? ' on' : '');
   $('toggle').textContent = S.running ? 'Pause' : 'Resume';
 
@@ -464,7 +542,7 @@ function paint(){
   animateReadouts({
     rate: rate==null?'—':money(rate),
     remaining: money(granted - used),
-    sessionSpend: money(S.usedAtStart==null ? 0 : used - S.usedAtStart),
+    sessionSpend: upToCent(S.usedAtStart==null ? 0 : used - S.usedAtStart),
     runway: runway==null?'—':(runway>240?'240h+':runway.toFixed(1)+'h'),
     used: money(used),
     granted: money(granted),
@@ -492,6 +570,14 @@ $('root').addEventListener('mousemove', e => {
 });
 $('root').addEventListener('mouseleave', () => tip.classList.remove('on'));
 
+// ponytail: one always-on second hand — simpler than wiring a timer into start/stop/pause
+setInterval(() => {
+  const el = $('elapsed');
+  if(el && S.since) el.textContent = elapsedText((Date.now()-S.since)/1000);
+}, 1000);
+
 render();
+
+if(new URLSearchParams(location.search).has('demo')) demo();
 </script>
 </body></html>
