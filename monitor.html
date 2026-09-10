@@ -26,7 +26,7 @@
     }
   }
   *{box-sizing:border-box}
-  html,body{margin:0;background:var(--paper)}
+  html,body{margin:0;background:var(--paper);font-family:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif}
   .or-root{
     background:var(--paper);
     color:var(--ink);
@@ -115,7 +115,7 @@
   .tip.on{visibility:visible;opacity:1}
   .tip b{display:block;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;
          font-size:21px;font-weight:600;letter-spacing:-0.01em}
-  .tip span{display:block;font-size:12.5px;opacity:.72;margin-top:3px}
+  .tip span{display:block;font-size:13px;line-height:1.5;opacity:.72;margin-top:1px}
 </style>
 
 </head><body><div class="or-root" id="root">
@@ -182,7 +182,7 @@ async function api(path, key){
 
 async function connect(){
   const key = $('key').value.trim();
-  if(!key) return;
+  if(!key || S.busy) return;
   S.busy = true; S.err = null; render();
   try{
     const c = await api('/credits', key);
@@ -355,6 +355,8 @@ function render(){
       </div>`;
     $('go').onclick = connect;
     $('key').onkeydown = e => { if(e.key==='Enter') connect(); };
+    // ponytail: paste is the only "provided" signal worth auto-firing on; typing a key by hand still needs Enter
+    $('key').oninput = e => { if(e.inputType==='insertFromPaste' && e.target.value.trim()) connect(); };
     $('key').focus();
     return;
   }
