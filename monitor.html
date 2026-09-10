@@ -260,7 +260,9 @@ function burnRate(){
   const a = (inWin.length>1 ? inWin[0] : S.samples[0]);
   const b = S.samples[S.samples.length-1];
   const hrs = (b.t - a.t)/3600000;
-  if(hrs <= 0) return null;
+  // ponytail: start() now polls immediately, so the first two samples can be milliseconds
+  // apart — extrapolating that gap gives a four-figure hourly rate. Wait for real spacing.
+  if(hrs*3600 < 5) return null;
   return (b.used - a.used)/hrs;
 }
 
