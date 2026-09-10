@@ -90,7 +90,7 @@
   h2{font-size:16px;font-weight:600;margin:0 0 2px}
   .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
 
-  .bars{width:100%;height:170px;display:block}
+  .bars{width:100%;height:186px;display:block}
   .models{margin-top:6px}
   .row{display:grid;grid-template-columns:1fr 84px;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--rule)}
   .row:last-child{border-bottom:0}
@@ -287,6 +287,12 @@ function paintSpark(){
   $('sparkmax').textContent = deltas.length ? money(max) : '—';
 }
 
+// round the axis top up to something with a readable label
+const niceMax = v => {
+  const p = 10 ** Math.floor(Math.log10(v));
+  return (([1,1.5,2,2.5,3,4,5,6,8].find(m => v <= m*p)) || 10) * p;
+};
+
 function dailyBars(){
   const byDay = {};
   for(const r of S.activity){
@@ -295,23 +301,34 @@ function dailyBars(){
   }
   const days = Object.keys(byDay).sort();
   if(!days.length) return '<p class="empty">No activity in the last 30 days.</p>';
-  const w = 1000, h = 170, bottom = 22;
+  const w = 1000, h = 186, bottom = 22, top = 8, left = 54;
   const max = Math.max(...days.map(d=>byDay[d]), 0.0001);
-  const bw = w/days.length;
+  const axisMax = niceMax(max);
+  const plot = h - bottom - top;
+  const yOf = v => h - bottom - (v/axisMax)*plot;
+  const bw = (w-left)/days.length;
+
+  let grid = '';
+  for(const f of [0, 0.5, 1]){
+    const y = yOf(axisMax*f);
+    if(f) grid += `<line x1="${left}" y1="${y.toFixed(1)}" x2="${w}" y2="${y.toFixed(1)}" stroke="var(--rule)" stroke-dasharray="2 5"/>`;
+    grid += `<text x="${left-9}" y="${(y+3.5).toFixed(1)}" font-size="11" fill="var(--muted)" text-anchor="end" font-family="IBM Plex Mono, monospace">${money(axisMax*f)}</text>`;
+  }
+
   let bars = '', labels = '';
   days.forEach((d,i)=>{
-    const bh = (byDay[d]/max)*(h-bottom-6);
-    const bx = i*bw + bw*0.14, bwid = bw*0.72;
-    bars += `<rect x="${bx.toFixed(1)}" y="${(h-bottom-bh).toFixed(1)}" width="${bwid.toFixed(1)}" height="${Math.max(bh,0.6).toFixed(1)}" fill="var(--ink)" style="animation-delay:${i*18}ms" data-tip="${money(byDay[d])}" data-tip-when="${esc(d)}"/>`;
+    const bh = Math.max((byDay[d]/axisMax)*plot, 0.6);
+    const bx = left + i*bw + bw*0.14, bwid = bw*0.72;
+    bars += `<rect x="${bx.toFixed(1)}" y="${(h-bottom-bh).toFixed(1)}" width="${bwid.toFixed(1)}" height="${bh.toFixed(1)}" fill="var(--ink)" style="animation-delay:${i*18}ms" data-tip="${money(byDay[d])}" data-tip-when="${esc(d)}"/>`;
     if(i===0 || i===days.length-1 || i===Math.floor(days.length/2)){
       const anchor = i===0?'start':(i===days.length-1?'end':'middle');
-      const tx = i===0?2:(i===days.length-1?w-2:bx+bwid/2);
+      const tx = i===0?left+2:(i===days.length-1?w-2:bx+bwid/2);
       labels += `<text x="${tx}" y="${h-6}" font-size="11" fill="var(--muted)" text-anchor="${anchor}" font-family="IBM Plex Mono, monospace">${d.slice(5)}</text>`;
     }
   });
   const total = days.reduce((s,d)=>s+byDay[d],0);
-  return `<svg class="bars" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Daily spend, last 30 days">
-    <line x1="0" y1="${h-bottom}" x2="${w}" y2="${h-bottom}" stroke="var(--rule)"/>${bars}${labels}</svg>
+  return `<svg class="bars" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="Daily spend, last 30 days, up to ${money(axisMax)} per day">
+    ${grid}<line x1="${left}" y1="${h-bottom}" x2="${w}" y2="${h-bottom}" stroke="var(--rule)"/>${bars}${labels}</svg>
     <p class="sub" style="margin-top:8px">Peak day ${money(max)} · 30-day total ${money(total)}</p>`;
 }
 
